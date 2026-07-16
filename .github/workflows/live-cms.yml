@@ -21,4 +21,3 @@ jobs:
           key: cms-icd-live-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
       - run: uv pip install --system -e ".[dev]"
       - run: pytest -q --tb=line -m live_cms tests/live
-

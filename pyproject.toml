@@ -31,12 +31,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pre-commit", "pytest"]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --doctest-glob=README.md -m 'not live_cms'"
+addopts = "--doctest-modules --doctest-glob=README.md --doctest-glob=docs/*.md -m 'not live_cms'"
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 markers = [
     "live_cms: integration tests that access official CMS endpoints",

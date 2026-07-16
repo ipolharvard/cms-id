@@ -7,6 +7,9 @@ or guideline PDFs.
 
 Python 3.12 or newer is required. The package is tested on Python 3.12–3.14.
 
+Full documentation is available at
+[ipolharvard.github.io/cms-id](https://ipolharvard.github.io/cms-id/).
+
 ## Installation
 
 Install an internal Git checkout with `uv`:
@@ -88,6 +91,8 @@ Small custom or synthetic stores can be supplied directly:
 ```bash
 make install-dev
 make test
+make install-docs
+make docs
 ```
 
 Normal tests are offline. `make test-live` accesses CMS and must be run only

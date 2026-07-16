@@ -8,8 +8,9 @@ dist/
 .ruff_cache/
 .coverage
 htmlcov/
+site/
+node_modules/
 data/
 uv.lock
 .idea/
 .ipynb_checkpoints/
-
