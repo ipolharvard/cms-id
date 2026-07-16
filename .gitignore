@@ -11,6 +11,7 @@ htmlcov/
 site/
 node_modules/
 .cms-diagnostics/
+.cms-cache/
 data/
 uv.lock
 .idea/

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      CMS_ICD_LIVE_CACHE: ${{ runner.temp }}/cms-icd-exhaustive
+      CMS_ICD_LIVE_CACHE: ${{ github.workspace }}/.cms-cache/exhaustive
       CMS_ICD_DIAGNOSTIC_DIR: .cms-diagnostics/exhaustive
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,5 @@ jobs:
           name: exhaustive-cms-diagnostics
           path: |
             .cms-diagnostics/exhaustive
-            ${{ runner.temp }}/cms-icd-exhaustive/fy*/**/manifest.json
+            .cms-cache/exhaustive/fy*/**/manifest.json
           if-no-files-found: ignore
