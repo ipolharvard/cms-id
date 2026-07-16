@@ -1,0 +1,31 @@
+name: Exhaustive CMS compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exhaustive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CMS_ICD_LIVE_CACHE: ${{ runner.temp }}/cms-icd-exhaustive
+      CMS_ICD_DIAGNOSTIC_DIR: .cms-diagnostics/exhaustive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv pip install --system -e ".[dev]"
+      - run: pytest -q --tb=line -m live_exhaustive tests/live
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exhaustive-cms-diagnostics
+          path: |
+            .cms-diagnostics/exhaustive
+            ${{ runner.temp }}/cms-icd-exhaustive/fy*/**/manifest.json
+          if-no-files-found: ignore

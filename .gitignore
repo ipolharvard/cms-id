@@ -10,6 +10,7 @@ dist/
 htmlcov/
 site/
 node_modules/
+.cms-diagnostics/
 data/
 uv.lock
 .idea/

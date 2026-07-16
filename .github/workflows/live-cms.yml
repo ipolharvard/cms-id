@@ -1,23 +1,65 @@
-name: Live CMS integration
+name: Live CMS artifacts
 
 on:
   workflow_dispatch:
   schedule:
     - cron: "17 8 1 * *"
 
+permissions:
+  contents: read
+
 jobs:
-  live-cms:
+  current:
+    name: Fresh current snapshot
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      CMS_ICD_FRESH_CACHE: ${{ runner.temp }}/cms-icd-current
+      CMS_ICD_DIAGNOSTIC_DIR: .cms-diagnostics/current
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
+      - run: uv pip install --system -e ".[dev]"
+      - run: pytest -q --tb=line -m live_current tests/live
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-cms-diagnostics
+          path: |
+            .cms-diagnostics/current
+            ${{ runner.temp }}/cms-icd-current/fy*/**/manifest.json
+          if-no-files-found: ignore
+
+  historical:
+    name: Historical format regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CMS_ICD_LIVE_CACHE: ~/.cache/cms-icd/live-tests
+      CMS_ICD_DIAGNOSTIC_DIR: .cms-diagnostics/historical
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Select monthly cache generation
+        id: cache-generation
+        run: echo "value=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: ~/.cache/cms-icd
-          key: cms-icd-live-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          key: cms-icd-historical-${{ runner.os }}-${{ steps.cache-generation.outputs.value }}
       - run: uv pip install --system -e ".[dev]"
-      - run: pytest -q --tb=line -m live_cms tests/live
+      - run: pytest -q --tb=line -m live_historical tests/live
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-cms-diagnostics
+          path: |
+            .cms-diagnostics/historical
+            ~/.cache/cms-icd/live-tests/fy*/**/manifest.json
+          if-no-files-found: ignore

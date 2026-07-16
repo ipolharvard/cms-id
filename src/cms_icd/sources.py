@@ -55,6 +55,14 @@ _PATTERNS: dict[tuple[str, str], tuple[str, ...]] = {
 }
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class CatalogEntry:
     """One downloadable material advertised by CMS."""
@@ -84,7 +92,12 @@ def _infer_system(label: str, href: str) -> str | None:
     text = f"{label} {href}".lower()
     if "pcs" in text:
         return "pcs"
-    if "cm" in text or "code tables, tabular and index" in text:
+    if (
+        "cm" in text
+        or "code tables, tabular and index" in text
+        or "code tables and index" in text
+        or "coding guidelines" in text
+    ):
         return "cm"
     return None
 
@@ -103,11 +116,15 @@ def _infer_year(label: str, href: str) -> int | None:
     return int(years[0]) if years else None
 
 
-def _infer_release_date(label: str, fiscal_year: int) -> date:
-    lowered = label.lower()
-    if "april" in lowered or re.search(r"\b04[-/ ]0?1\b", lowered):
+def _infer_release_date(label: str, href: str, fiscal_year: int) -> date:
+    """Infer an effective date without treating file corrections as releases."""
+    text = f"{label} {href}".lower()
+    if "april" in text:
         return date(fiscal_year, 4, 1)
-    if "january" in lowered:
+    if (
+        re.search(r"\b(?:effective[- ]+)?january[- ]+0?1\b", text)
+        or "january-1" in text
+    ):
         return date(fiscal_year, 1, 1)
     return date(fiscal_year - 1, 10, 1)
 
@@ -131,7 +148,7 @@ def parse_catalog(
         if system is None or material is None or fiscal_year is None:
             continue
         url = urljoin(page_url, href)
-        release_date = _infer_release_date(label, fiscal_year)
+        release_date = _infer_release_date(label, href, fiscal_year)
         materials = ("tabular", "index") if material == "bundle" else (material,)
         entries.extend(
             CatalogEntry(
@@ -224,7 +241,13 @@ def _directory_lock(path: Path, timeout: float = 30.0) -> Iterable[None]:
 
 
 class CMSProvider(MaterialProvider):
-    """Lazily resolve and cache materials from official CMS catalog pages."""
+    """Lazily resolve and cache materials from official CMS catalog pages.
+
+    Exact revisions represent snapshots: each material resolves to the latest
+    artifact effective on or before the requested revision. The requested date
+    must itself be a revision advertised by CMS unless an explicit fallback is
+    enabled.
+    """
 
     def __init__(
         self,
@@ -260,12 +283,14 @@ class CMSProvider(MaterialProvider):
         return self._catalog
 
     def _select(self, system: str, material: str) -> CatalogEntry:
+        catalog = self._load_catalog()
+        all_for_year = [
+            entry for entry in catalog if entry.fiscal_year == self.release.fiscal_year
+        ]
         candidates = [
             entry
-            for entry in self._load_catalog()
-            if entry.system == system
-            and entry.material == material
-            and entry.fiscal_year == self.release.fiscal_year
+            for entry in all_for_year
+            if entry.system == system and entry.material == material
         ]
         if self.service_date is not None:
             candidates = [
@@ -277,26 +302,35 @@ class CMSProvider(MaterialProvider):
                     item for item in candidates if item.release_date == selected_date
                 ]
         else:
-            candidates = [
-                item
-                for item in candidates
-                if item.release_date == self.release.release_date
-            ]
+            known_release_dates = {item.release_date for item in all_for_year}
+            if self.release.release_date in known_release_dates:
+                candidates = [
+                    item
+                    for item in candidates
+                    if item.release_date <= self.release.release_date
+                ]
+                if candidates:
+                    selected_date = max(item.release_date for item in candidates)
+                    candidates = [
+                        item
+                        for item in candidates
+                        if item.release_date == selected_date
+                    ]
+            else:
+                candidates = []
 
         unique = {(item.url, item.release_date): item for item in candidates}
         candidates = list(unique.values())
         if not candidates and self.fallback == "latest_for_fy":
-            all_for_year = [
+            available = [
                 entry
-                for entry in self._load_catalog()
-                if entry.system == system
-                and entry.material == material
-                and entry.fiscal_year == self.release.fiscal_year
+                for entry in all_for_year
+                if entry.system == system and entry.material == material
             ]
-            if all_for_year:
-                selected_date = max(item.release_date for item in all_for_year)
+            if available:
+                selected_date = max(item.release_date for item in available)
                 candidates = [
-                    item for item in all_for_year if item.release_date == selected_date
+                    item for item in available if item.release_date == selected_date
                 ]
         if not candidates:
             raise ReleaseUnavailableError(
@@ -319,22 +353,46 @@ class CMSProvider(MaterialProvider):
             / entry.material
         )
 
+    @staticmethod
+    def _manifest_files(destination: Path, manifest_path: Path) -> tuple[Path, ...]:
+        """Return validated extracted files, or an empty tuple for stale state."""
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            names = manifest["files"]
+            checksums = manifest["file_sha256"]
+            if (
+                not isinstance(names, list)
+                or not names
+                or not isinstance(checksums, dict)
+            ):
+                return ()
+            files = tuple(destination / name for name in names)
+            if any(
+                not isinstance(name, str)
+                or Path(name).name != name
+                or not path.is_file()
+                or checksums.get(name) != _sha256(path)
+                for name, path in zip(names, files, strict=True)
+            ):
+                return ()
+            return files
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            return ()
+
     def paths(self, system: str, material: str) -> tuple[Path, ...]:
         entry = self._select(system, material)
         destination = self._artifact_dir(entry)
         manifest_path = destination / "manifest.json"
         if manifest_path.exists():
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            files = tuple(destination / name for name in manifest["files"])
-            if files and all(path.is_file() for path in files):
+            files = self._manifest_files(destination, manifest_path)
+            if files:
                 return files
 
         destination.parent.mkdir(parents=True, exist_ok=True)
         with _directory_lock(destination):
             if manifest_path.exists():
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                files = tuple(destination / name for name in manifest["files"])
-                if files and all(path.is_file() for path in files):
+                files = self._manifest_files(destination, manifest_path)
+                if files:
                     return files
             staging = destination.with_name(destination.name + ".tmp")
             if staging.exists():
@@ -354,6 +412,10 @@ class CMSProvider(MaterialProvider):
                     "page_url": entry.page_url,
                     "sha256": digest,
                     "files": [path.name for path in files],
+                    "file_sha256": {
+                        path.name: _sha256(path)
+                        for path in sorted(files, key=lambda item: item.name)
+                    },
                 }
                 (staging / "manifest.json").write_text(
                     json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -365,8 +427,10 @@ class CMSProvider(MaterialProvider):
             except Exception:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return tuple(destination / name for name in manifest["files"])
+        files = self._manifest_files(destination, manifest_path)
+        if not files:
+            raise DownloadError(f"Generated cache manifest is invalid: {manifest_path}")
+        return files
 
     def _download_and_extract(
         self,
@@ -381,11 +445,18 @@ class CMSProvider(MaterialProvider):
         extracted: list[Path] = []
         try:
             if artifact.suffix.lower() == ".pdf":
+                with artifact.open("rb") as handle:
+                    signature = handle.read(5)
+                if not signature.startswith(b"%PDF-"):
+                    raise DownloadError(
+                        f"CMS artifact is not a valid PDF file: {entry.url}"
+                    )
                 target = staging / Path(entry.url).name
                 shutil.copy2(artifact, target)
                 extracted.append(target)
             else:
                 with ZipFile(artifact) as archive:
+                    extracted_names: set[str] = set()
                     for member in archive.infolist():
                         filename = Path(member.filename).name
                         if not filename or not any(
@@ -393,9 +464,16 @@ class CMSProvider(MaterialProvider):
                             for pattern in patterns
                         ):
                             continue
+                        if filename in extracted_names:
+                            raise DownloadError(
+                                "CMS artifact contains duplicate filename "
+                                f"{filename!r}: "
+                                f"{entry.url}"
+                            )
                         target = staging / filename
                         target.write_bytes(archive.read(member))
                         extracted.append(target)
+                        extracted_names.add(filename)
         except BadZipFile as exc:
             raise DownloadError(
                 f"CMS artifact is not a valid ZIP file: {entry.url}"
@@ -415,12 +493,18 @@ class CMSProvider(MaterialProvider):
         artifact = artifact_dir / f"artifact{suffix}"
         checksum = artifact_dir / "sha256"
         if artifact.is_file() and checksum.is_file():
-            return artifact, checksum.read_text(encoding="ascii").strip()
+            expected = checksum.read_text(encoding="ascii").strip()
+            if expected and _sha256(artifact) == expected:
+                return artifact, expected
 
         artifact_dir.parent.mkdir(parents=True, exist_ok=True)
         with _directory_lock(artifact_dir):
             if artifact.is_file() and checksum.is_file():
-                return artifact, checksum.read_text(encoding="ascii").strip()
+                expected = checksum.read_text(encoding="ascii").strip()
+                if expected and _sha256(artifact) == expected:
+                    return artifact, expected
+            if artifact_dir.exists():
+                shutil.rmtree(artifact_dir)
             try:
                 response = self._session.get(entry.url, timeout=60, stream=True)
                 response.raise_for_status()
@@ -428,24 +512,30 @@ class CMSProvider(MaterialProvider):
                 raise DownloadError(f"Unable to download {entry.url}: {exc}") from exc
 
             digest = hashlib.sha256()
-            with NamedTemporaryFile(
-                dir=artifact_dir.parent,
-                suffix=suffix,
-                delete=False,
-            ) as handle:
-                temporary = Path(handle.name)
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        handle.write(chunk)
-                        digest.update(chunk)
-            staging = artifact_dir.with_name(artifact_dir.name + ".tmp")
-            shutil.rmtree(staging, ignore_errors=True)
-            staging.mkdir()
-            temporary.replace(staging / artifact.name)
-            (staging / checksum.name).write_text(
-                digest.hexdigest() + "\n", encoding="ascii"
-            )
-            if artifact_dir.exists():
-                shutil.rmtree(artifact_dir)
-            staging.replace(artifact_dir)
+            temporary: Path | None = None
+            try:
+                with NamedTemporaryFile(
+                    dir=artifact_dir.parent,
+                    suffix=suffix,
+                    delete=False,
+                ) as handle:
+                    temporary = Path(handle.name)
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            handle.write(chunk)
+                            digest.update(chunk)
+                staging = artifact_dir.with_name(artifact_dir.name + ".tmp")
+                shutil.rmtree(staging, ignore_errors=True)
+                staging.mkdir()
+                temporary.replace(staging / artifact.name)
+                temporary = None
+                (staging / checksum.name).write_text(
+                    digest.hexdigest() + "\n", encoding="ascii"
+                )
+                staging.replace(artifact_dir)
+            except requests.RequestException as exc:
+                raise DownloadError(f"Unable to download {entry.url}: {exc}") from exc
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
         return artifact, checksum.read_text(encoding="ascii").strip()

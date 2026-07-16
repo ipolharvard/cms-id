@@ -1,0 +1,30 @@
+name: CMS catalog contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 8 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CMS_ICD_DIAGNOSTIC_DIR: .cms-diagnostics/catalog
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv pip install --system -e ".[dev]"
+      - run: pytest -q --tb=line -m live_catalog tests/live
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cms-catalog-diagnostics
+          path: .cms-diagnostics/catalog
+          if-no-files-found: ignore

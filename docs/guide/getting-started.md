@@ -2,7 +2,7 @@
 
 ## Select a release
 
-For coding a service, select materials by the service date:
+For operational coding, select materials using the date that controls coding:
 
 ```python
 from datetime import date
@@ -12,7 +12,12 @@ from cms_icd import ICD10KnowledgeBase
 icd = ICD10KnowledgeBase.for_date(date(2026, 5, 1))
 ```
 
-For a reproducible dataset or experiment, pin the exact effective revision:
+Use the discharge date for inpatient ICD-10-CM and ICD-10-PCS. Use the encounter
+or date of service for other ICD-10-CM coding. See
+[Releases and caching](releases-and-caching.md) for the October/April boundary
+and guideline availability.
+
+For a reproducible dataset or experiment, pin the exact effective snapshot:
 
 ```python
 icd = ICD10KnowledgeBase.from_cms(

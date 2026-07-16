@@ -36,6 +36,11 @@ Normal tests do not access CMS. Live CMS tests are marked `live_cms` and run
 only through the explicitly requested live integration workflow or
 `make test-live`.
 
+The live suite is divided into catalog, fresh-current, historical, and
+exhaustive lanes. See
+[Testing CMS compatibility](testing.md) for their scope, schedules, cache
+policy, and maintenance instructions.
+
 ## Documentation deployment
 
 Pull requests build the site without deploying it. A push to `main` builds the

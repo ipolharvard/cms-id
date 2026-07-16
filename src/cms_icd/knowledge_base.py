@@ -363,9 +363,11 @@ class ICD10KnowledgeBase:
         cache_dir: str | Path | None = None,
         fallback: str | None = None,
     ) -> Self:
-        """Create a lazy selector for an exact CMS fiscal-year release.
+        """Create a lazy selector for an exact CMS fiscal-year snapshot.
 
         ``year`` is accepted as a compatibility alias for ``fiscal_year``.
+        Materials unchanged in the requested revision are inherited from the
+        latest earlier revision in the same fiscal year.
 
         Args:
             fiscal_year: CMS fiscal year.
@@ -394,7 +396,16 @@ class ICD10KnowledgeBase:
         cache_dir: str | Path | None = None,
         fallback: str | None = None,
     ) -> Self:
-        """Create a lazy selector for materials applicable on a service date."""
+        """Create a lazy selector for materials applicable on a coding date.
+
+        Use the discharge date for inpatient ICD-10-CM and ICD-10-PCS. Use the
+        encounter or date of service for other ICD-10-CM coding.
+
+        Args:
+            service_date: Date that controls coding for the record.
+            cache_dir: Optional artifact cache directory.
+            fallback: Set to ``"latest_for_fy"`` to permit an explicit fallback.
+        """
         release = Release(fiscal_year_for(service_date), service_date)
         return cls(
             CMSProvider(

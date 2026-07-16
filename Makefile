@@ -3,7 +3,8 @@ SHELL := /bin/bash
 PYTHON ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: install install-dev install-docs test test-live docs docs-serve clean
+.PHONY: install install-dev install-docs test test-live test-live-catalog \
+	test-live-current test-live-historical test-live-exhaustive docs docs-serve clean
 
 install:
 	$(UV) pip install --python $(PYTHON) -e .
@@ -18,7 +19,20 @@ test:
 	$(PYTHON) -m pytest
 
 test-live:
-	$(PYTHON) -m pytest -q --tb=line -m live_cms tests/live
+	$(PYTHON) -m pytest -q --tb=line \
+		-m 'live_catalog or live_current or live_historical' tests/live
+
+test-live-catalog:
+	$(PYTHON) -m pytest -q --tb=line -m live_catalog tests/live
+
+test-live-current:
+	$(PYTHON) -m pytest -q --tb=line -m live_current tests/live
+
+test-live-historical:
+	$(PYTHON) -m pytest -q --tb=line -m live_historical tests/live
+
+test-live-exhaustive:
+	$(PYTHON) -m pytest -q --tb=line -m live_exhaustive tests/live
 
 docs:
 	$(PYTHON) -m mkdocs build --strict

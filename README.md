@@ -6,6 +6,8 @@ does not download PCS files, and reading a tabular list does not parse indexes
 or guideline PDFs.
 
 Python 3.12 or newer is required. The package is tested on Python 3.12–3.14.
+CMS-backed discovery supports production ICD-10 releases from FY 2016 onward,
+including advertised intra-year updates.
 
 Full documentation is available at
 [ipolharvard.github.io/cms-id](https://ipolharvard.github.io/cms-id/).
@@ -20,7 +22,7 @@ uv pip install -e /path/to/cms-icd
 
 ## Choosing a release
 
-Select the release applicable to a service date:
+Select the release using the date that controls coding:
 
 ```python
 from datetime import date
@@ -35,7 +37,10 @@ cm = icd.cm
 code = cm["I10"]  # downloads and parses CM tabular material on first use
 ```
 
-For reproducible research, select an exact effective revision:
+Use the discharge date for inpatient ICD-10-CM and ICD-10-PCS, and the encounter
+or date of service for other ICD-10-CM coding.
+
+For reproducible research, select an exact effective snapshot:
 
 ```python
 icd = ICD10KnowledgeBase.from_cms(
@@ -45,9 +50,15 @@ icd = ICD10KnowledgeBase.from_cms(
 )
 ```
 
-CMS does not always retain every historical intra-year revision. Selection is
-strict by default. Pass `fallback="latest_for_fy"` only when using the closest
-available fiscal-year material is scientifically acceptable.
+CMS commonly publishes an October release and an April 1 update. Materials not
+changed in an update are inherited from the latest earlier revision in that
+fiscal year. CMS does not always retain every historical revision, so snapshot
+selection is strict by default. Pass `fallback="latest_for_fy"` only when using
+the latest available fiscal-year material is scientifically acceptable.
+
+The [release guide](https://ipolharvard.github.io/cms-id/guide/releases-and-caching/)
+documents supported guideline years and the exact October/April selection
+rules.
 
 ## Offline and custom stores
 
@@ -97,6 +108,10 @@ make docs
 
 Normal tests are offline. `make test-live` accesses CMS and must be run only
 when live integration testing is explicitly intended.
+
+CMS compatibility is validated in separate catalog, fresh-current, historical,
+and manual exhaustive lanes. See the
+[testing strategy](https://ipolharvard.github.io/cms-id/testing/).
 
 The package depends on PyMuPDF for guideline extraction. Confirm PyMuPDF's
 licensing is suitable for the intended distribution before publishing this

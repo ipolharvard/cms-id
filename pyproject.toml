@@ -44,6 +44,10 @@ addopts = "--doctest-modules --doctest-glob=README.md --doctest-glob=docs/*.md -
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 markers = [
     "live_cms: integration tests that access official CMS endpoints",
+    "live_catalog: fetch and validate CMS catalog pages without artifacts",
+    "live_current: freshly download and parse the latest complete CMS snapshot",
+    "live_historical: parse representative historical CMS artifact formats",
+    "live_exhaustive: manually download and parse every advertised snapshot",
 ]
 
 [tool.ruff]

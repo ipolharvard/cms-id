@@ -61,6 +61,18 @@ requested, keep output compact:
 .venv/bin/python -m pytest -q --tb=line -m live_cms tests/live
 ```
 
+Use the narrower targets when only one external contract needs validation:
+
+```bash
+make test-live-catalog
+make test-live-current
+make test-live-historical
+```
+
+`make test-live-exhaustive` downloads and parses every advertised release. Run
+it only when the user explicitly requests an exhaustive CMS compatibility
+audit.
+
 Do not delete downloaded CMS materials or caches without explicit approval.
 
 ## Test and Documentation Style
