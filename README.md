@@ -1,5 +1,11 @@
 # CMS ICD
 
+[![CI](https://github.com/ipolharvard/cms-id/actions/workflows/ci.yml/badge.svg)](https://github.com/ipolharvard/cms-id/actions/workflows/ci.yml)
+[![Documentation](https://github.com/ipolharvard/cms-id/actions/workflows/docs.yml/badge.svg)](https://ipolharvard.github.io/cms-id/)
+[![CMS catalog](https://github.com/ipolharvard/cms-id/actions/workflows/catalog-cms.yml/badge.svg)](https://github.com/ipolharvard/cms-id/actions/workflows/catalog-cms.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 `cms-icd` provides version-aware, structured access to official CMS ICD-10-CM
 and ICD-10-PCS materials. Downloads and parsing are lazy: using diagnosis codes
 does not download PCS files, and reading a tabular list does not parse indexes
